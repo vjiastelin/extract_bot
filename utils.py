@@ -114,6 +114,7 @@ def update_worksheet(asics_pd : pd.DataFrame):
         sh = gc.open_by_key(SHEET_KEY)
         worksheet = sh.get_worksheet(0)
         worksheet.clear()
+        asics_pd['price_rub'] = asics_pd['price_rub'] * 1.1
         response = worksheet.update(
             [['Наименование', 'Цена']] + asics_pd[asics_pd.used_flag == False][['asic_name_raw', 'price_rub']].values.tolist())
         endIdx = re.search(
