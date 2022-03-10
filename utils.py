@@ -5,7 +5,6 @@ import pandas as pd
 import os
 import gspread
 import re
-import difflib
 import numpy as np
 from datetime import date
 import psycopg2
@@ -13,7 +12,7 @@ import psycopg2
 dir_store = './tmp_storage'
 pd.options.mode.chained_assignment = None
 
-dsn = 'postgresql://hkgykgvuodbtsn:8538ef37160181bc37d75fce56bbb4ed3fcfae1f889c825176387ed51d5587e0@ec2-34-250-92-138.eu-west-1.compute.amazonaws.com:5432/dn07ivjktvfkr'
+dsn = 'postgresql://postgres:password@94.26.229.197:5432/postgres'
 
 CREDENTIALS_FILE = r'python-spreeadsheet-projects-3375f9903aba.json'
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
@@ -21,6 +20,24 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
 
 SHEET_KEY = '1q1UZjcg9Il5LNPrEbyf0ZX0M36tMyBYBXx9KLcG6g3g'
 # SHEET_KEY = '12TbKrKM_DBpFxMrsnDaQAl8WLKaUur1qPzJrBfD3xUg'
+
+
+def get_match(x,dict,reg_exp):
+    tmp_row = re.sub(reg_exp,'',x.upper().replace(' ',''))
+    val = dict[dict['search_name'] == tmp_row]['name'].values
+    return val[0] if len(val) > 0 else None
+
+def pg_upsert(table,conn, keys, data_iter):
+    from sqlalchemy.dialects.postgresql import insert
+
+    data = [dict(zip(keys, row)) for row in data_iter]
+
+    insert_statement = insert(table.table).values(data)
+    upsert_statement = insert_statement.on_conflict_do_update(
+        index_elements=table.index,
+        set_={c.key: c for c in insert_statement.excluded},
+    )
+    conn.execute(upsert_statement)
 
 
 def pdf_to_excel(file_name: str, username: str):
@@ -37,7 +54,7 @@ def delete_from_db(price_date):
     try:
         conn = psycopg2.connect(dsn)        
         cur = conn.cursor()
-        cur.execute('delete from asics_prices where price_date = %s',(price_date,))
+        cur.execute('delete from asics.asics_prices where price_date = %s',(price_date,))
 
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as error:
@@ -45,24 +62,43 @@ def delete_from_db(price_date):
     finally:
         if conn is not None:
             cur.close()
-            conn.close() 
+            conn.close()
 
-def acics_price(file_name: str):    
+def acics_price(file_name: str):
+    chars_to_remove = ['-']
+    regular_expression = '|'.join([re.escape(x.upper()) for x in chars_to_remove])
+    df_dict = pd.read_sql("select name, upper(replace(name,' ','')) search_name from asics.asics_list",dsn)
+    df_dict = df_dict.fillna('')
     try:
         tables = tabula.read_pdf(file_name, pages="all")
-        df = buid_dataframe(tables)
-        df.to_sql('asics_prices',dsn,if_exists='append',index=False)
+        df = buid_dataframe(tables,df_dict,regular_expression)
+        df.to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
         spread_sheet = update_worksheet(df)
         return spread_sheet
     except Exception as e:
         delete_from_db(date.today())
         raise e
-    
+
+def get_today_curr():
+    import requests
+    import json
+    currency_api = f'https://currencyapi.com/api/v2/latest?apikey=a7ea9a90-9dda-11ec-a030-a3200f160e11'
+    #currency_api = f'https://freecurrencyapi.net/api/v2/historical?apikey=a7ea9a90-9dda-11ec-a030-a3200f160e11&base_currency=USD&date_from={df_dates.iloc[0][0]}&date_to={df_dates.iloc[-1][0]}'
+    header = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36",
+    "X-Requested-With": "XMLHttpRequest"
+    }
+    try:
+        r = requests.get(currency_api, headers=header)
+    except:
+        raise Exception('Something wrong with currency api')
+    data = json.loads(r.text)
+    return data['data']['RUB']
 
 
-def buid_dataframe(tables):
+def buid_dataframe(tables,df_dict,regular_expression):
     price_date = date.today().strftime('%Y-%m-%d')
-    df = pd.read_sql('SELECT * FROM asics_prices where 1=0', dsn)
+    df = pd.read_sql('SELECT * FROM asics.asics_prices where 1=0',dsn)
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
         # Drop empty and
@@ -71,36 +107,42 @@ def buid_dataframe(tables):
         tmp_df.loc[-1] = tmp_df.columns
         tmp_df.index = tmp_df.index + 1  # shifting index
         tmp_df = tmp_df.sort_index()
+        checked_value = tmp_df[tmp_df.columns[1]].astype('str').str.extractall('([\d.]+)').unstack().fillna('').sum(axis=1).astype(int).tolist()[0]
+        if checked_value < 100000:
+            price_col = 'price_usd'
         # Rename columns
         tmp_df.rename(
-            {tmp_df.columns[0]: 'asic_name_raw', tmp_df.columns[1]: 'price_rub', tmp_df.columns[2]: 'price_cny'}, axis=1, inplace=True)
+            {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[1]: price_col, tmp_df.columns[2]: 'price_cny'}, axis=1, inplace=True)
         df = df.append(tmp_df, ignore_index=True)
     df = df.replace([0.0,'0',0], np.nan)
-    df = df.drop_duplicates(subset=['asic_name_raw', 'price_rub'])
+    df = df.drop_duplicates(subset=['asic_name_raw', price_col])
     index = df[df['asic_name_raw'].str.contains("Б/У")].index[0]
 
     #Mark used and brandnew asics
     df.loc[index+1:, 'used_flag'] = True
     df.loc[df['used_flag'] != True, 'used_flag'] = False
 
-    df['price_rub'] = pd.to_numeric(df['price_rub'],errors='coerce')
-    df.dropna(subset=['price_rub'],inplace=True)
+    #Format main price col and calc for exchange
+    df[price_col] = pd.to_numeric(df[price_col],errors='coerce')
+    df.dropna(subset=[price_col],inplace=True)
+
+    currency = get_today_curr()
+
+    if 'usd' in price_col:
+        df['price_rub'] = (df['price_usd'] * currency).round(2)
+    else:
+        df['price_usd'] = (df['price_rub'] / currency).round(2)
+
     # Format cny column
     df['price_cny'] = df['price_cny'].apply(lambda x: x.replace(" ", "") if type(x) is str else x)
     df['price_cny'] = pd.to_numeric(df['price_cny'],errors='coerce')
     # Format asic_name_raw column
     df['asic_name_raw'] = df['asic_name_raw'].apply(lambda x: x.replace("▪", ""))
-    #Paste date for price
+    #Insert price date
     df['price_date'] = price_date
 
-    df_al = pd.read_sql('SELECT name FROM asics_list', dsn)
-   
-    def get_match(x):
-        match = difflib.get_close_matches(x.upper(),df_al['name'],1,0.75)
-        return match[0] if len(match) > 0 else None
-
-    df['asic_name'] = df['asic_name_raw'].apply(lambda x: get_match(x))
-
+    df['asic_name'] = df['asic_name_raw'].apply(lambda x: get_match(x,df_dict,regular_expression))
+    df = df.reset_index(drop=True)
     return df
 
 
@@ -113,18 +155,19 @@ def update_worksheet(asics_pd : pd.DataFrame):
     try:
         sh = gc.open_by_key(SHEET_KEY)
         worksheet = sh.get_worksheet(0)
-        worksheet.clear()
-        asics_pd['price_rub'] = asics_pd['price_rub'] * 1.1
+        worksheet.clear()     
+        asics_pd['price_usd'] = asics_pd['price_usd'] * 1.1
         response = worksheet.update(
-            [['Наименование', 'Цена']] + asics_pd[asics_pd.used_flag == False][['asic_name_raw', 'price_rub']].values.tolist())
+            [['Наименование','Цена (usd)']] + asics_pd[asics_pd.used_flag == False][['asic_name_raw','price_usd']].values.tolist())
         endIdx = re.search(
             r'\d+', response['updatedRange'].split(':')[1]).group(0)
         worksheet.update(f'A{str(int(endIdx) + 1)}', 'Б/У')
         worksheet.update(f'A{str(int(endIdx) + 2)}',
-                         asics_pd[asics_pd.used_flag == True][['asic_name_raw', 'price_rub']].values.tolist())
+                         asics_pd[asics_pd.used_flag == True][['asic_name_raw','price_usd']].values.tolist())
         worksheet.format('A1:B1', {'textFormat': {'bold': True}})
 
         return f'https://docs.google.com/spreadsheets/d/{SHEET_KEY}'
 
     except HttpError as e:
         print(e)
+
