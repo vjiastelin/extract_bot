@@ -39,8 +39,8 @@ def parse(update: Update, context: CallbackContext):
     try:
         if from_asic_store:
             context.bot.send_message(               
-                #'-1001556087383',
-                update.effective_chat.id,
+                '-1001556087383',
+                #update.effective_chat.id,
                 text=acics_price(file_name))
                 
         else:
