@@ -8,18 +8,17 @@ import re
 import numpy as np
 from datetime import date
 import psycopg2
+from decouple import config
 
 dir_store = './tmp_storage'
 pd.options.mode.chained_assignment = None
 
-dsn = 'postgresql://postgres:password@94.26.229.197:5432/postgres'
+dsn = config('DSN')
+SHEET_KEY = config('SHEET_KEY')
 
 CREDENTIALS_FILE = r'python-spreeadsheet-projects-3375f9903aba.json'
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
           'https://www.googleapis.com/auth/drive']
-
-SHEET_KEY = '1q1UZjcg9Il5LNPrEbyf0ZX0M36tMyBYBXx9KLcG6g3g'
-# SHEET_KEY = '12TbKrKM_DBpFxMrsnDaQAl8WLKaUur1qPzJrBfD3xUg'
 
 
 def get_match(x,dict,reg_exp):
@@ -72,7 +71,8 @@ def acics_price(file_name: str):
     try:
         tables = tabula.read_pdf(file_name, pages="all")
         df = buid_dataframe(tables,df_dict,regular_expression)
-        df.to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
+        if config('TO_DB',default=True,cast=bool):
+            df.to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
         spread_sheet = update_worksheet(df)
         return spread_sheet
     except Exception as e:
@@ -83,7 +83,6 @@ def get_today_curr():
     import requests
     import json
     currency_api = f'https://currencyapi.com/api/v2/latest?apikey=a7ea9a90-9dda-11ec-a030-a3200f160e11'
-    #currency_api = f'https://freecurrencyapi.net/api/v2/historical?apikey=a7ea9a90-9dda-11ec-a030-a3200f160e11&base_currency=USD&date_from={df_dates.iloc[0][0]}&date_to={df_dates.iloc[-1][0]}'
     header = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36",
     "X-Requested-With": "XMLHttpRequest"

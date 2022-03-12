@@ -3,10 +3,11 @@ import os
 from telegram import Update
 from telegram.ext import MessageHandler, Filters, CallbackContext, CommandHandler, Updater
 from utils import pdf_to_excel, acics_price
+from decouple import config
 
 dir_store = './tmp_storage'
 Path(dir_store).mkdir(parents=True, exist_ok=True)
-updater = Updater(token='5066741984:AAE3jgk8-TLCeTkjqSXtTMZ0dzB-mBk_v8M')
+updater = Updater(token=config('BOT_TOKEN'))
 
 
 def start(update: Update, context: CallbackContext):
@@ -39,8 +40,7 @@ def parse(update: Update, context: CallbackContext):
     try:
         if from_asic_store:
             context.bot.send_message(               
-                '-1001556087383',
-                #update.effective_chat.id,
+                chat_id=config('CHAT_ID'),
                 text=acics_price(file_name))
                 
         else:
