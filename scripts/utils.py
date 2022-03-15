@@ -9,6 +9,9 @@ import numpy as np
 from datetime import date
 import psycopg2
 from decouple import config
+from sqlalchemy import select,inspect
+from orm import AsicsList,AsicsPrices
+
 
 dir_store = './tmp_storage'
 pd.options.mode.chained_assignment = None
@@ -54,7 +57,6 @@ def delete_from_db(price_date):
         conn = psycopg2.connect(dsn)        
         cur = conn.cursor()
         cur.execute('delete from asics.asics_prices where price_date = %s',(price_date,))
-
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as error:
         raise error
@@ -97,7 +99,7 @@ def get_today_curr():
 
 def buid_dataframe(tables,df_dict,regular_expression):
     price_date = date.today().strftime('%Y-%m-%d')
-    df = pd.read_sql('SELECT * FROM asics.asics_prices where 1=0',dsn)
+    df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
         # Drop empty and
@@ -115,10 +117,11 @@ def buid_dataframe(tables,df_dict,regular_expression):
         df = df.append(tmp_df, ignore_index=True)
     df = df.replace([0.0,'0',0], np.nan)
     df = df.drop_duplicates(subset=['asic_name_raw', price_col])
-    index = df[df['asic_name_raw'].str.contains("Б/У")].index[0]
-
+ 
     #Mark used and brandnew asics
-    df.loc[index+1:, 'used_flag'] = True
+    index = df[df['asic_name_raw'].str.contains("Б/У")].index
+    if len(index) > 0:
+        df.loc[index[0]+1:, 'used_flag'] = True
     df.loc[df['used_flag'] != True, 'used_flag'] = False
 
     #Format main price col and calc for exchange
@@ -157,7 +160,7 @@ def update_worksheet(asics_pd : pd.DataFrame):
         worksheet.clear()     
         asics_pd['price_usd'] = asics_pd['price_usd'] * 1.1
         response = worksheet.update(
-            [['Наименование','Цена (usd)']] + asics_pd[asics_pd.used_flag == False][['asic_name_raw','price_usd']].values.tolist())
+            [['Наименование','Цена (usdt)']] + asics_pd[asics_pd.used_flag == False][['asic_name_raw','price_usd']].values.tolist())
         endIdx = re.search(
             r'\d+', response['updatedRange'].split(':')[1]).group(0)
         worksheet.update(f'A{str(int(endIdx) + 1)}', 'Б/У')
