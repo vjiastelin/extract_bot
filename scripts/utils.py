@@ -145,7 +145,7 @@ def buid_dataframe(tables,df_dict,regular_expression):
 
     df['asic_name'] = df['asic_name_raw'].apply(lambda x: get_match(x,df_dict,regular_expression))
     df = df.groupby(['asic_name_raw']).max()
-    df = df.reset_index(drop=True)
+    df = df.reset_index()
     return df
 
 
