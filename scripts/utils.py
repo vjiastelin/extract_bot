@@ -65,14 +65,15 @@ def delete_from_db(price_date):
             cur.close()
             conn.close()
 
-def acics_price(file_name: str):
+def acics_price(file_name: str,original_name: str):
     chars_to_remove = ['-']
     regular_expression = '|'.join([re.escape(x.upper()) for x in chars_to_remove])
     df_dict = pd.read_sql("select name, upper(replace(name,' ','')) search_name from asics.asics_list",dsn)
     df_dict = df_dict.fillna('')
+    mathces = re.search('(\d{2}_\d{2}_\d{1,2})',original_name)
     try:
         tables = tabula.read_pdf(file_name, pages="all")
-        df = buid_dataframe(tables,df_dict,regular_expression)
+        df = buid_dataframe(tables,df_dict,regular_expression,mathces[0])
         if config('TO_DB',default=True,cast=bool):
             df.to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
         spread_sheet = update_worksheet(df)
@@ -97,13 +98,13 @@ def get_today_curr():
     return data['data']['RUB']
 
 
-def buid_dataframe(tables,df_dict,regular_expression):
-    price_date = date.today().strftime('%Y-%m-%d')
+def buid_dataframe(tables,df_dict,regular_expression,price_date):
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
         # Drop empty and
         tmp_df = table.dropna(how='all', axis=1)
+        tmp_df = tmp_df.dropna(how='all', axis=0)
         # Shift columns name to first row
         tmp_df.loc[-1] = tmp_df.columns
         tmp_df.index = tmp_df.index + 1  # shifting index

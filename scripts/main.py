@@ -27,24 +27,26 @@ def parse(update: Update, context: CallbackContext):
     if update.message.forward_from_chat is not None:
         from_asic_store = True if update.message.forward_from_chat.username == 'Asictradeshop' else False
 
-    file_name = os.path.join(dir_store, str(
+    file_path = os.path.join(dir_store, str(
         update.message.from_user.username)) + '_file.pdf'
+
+    original_name = update.message.document.file_name
 
     if update.message.document.mime_type != 'application/pdf':
         context.bot.send_message(
             chat_id=update.effective_chat.id, text='PDF files only allowed')
         return
     file_info = context.bot.get_file(update.message.document)
-    file_info.download(file_name)
+    file_info.download(file_path)
     
     try:
         if from_asic_store:
             context.bot.send_message(               
                 chat_id=config('CHAT_ID'),
-                text=acics_price(file_name))
+                text=acics_price(file_path,original_name))
                 
         else:
-            for file in pdf_to_excel(file_name, update.message.from_user.username):
+            for file in pdf_to_excel(file_path, update.message.from_user.username):
                 with open(file, 'rb') as f:
                     context.bot.send_document(update.effective_chat.id, document=f)
     except Exception as e:
