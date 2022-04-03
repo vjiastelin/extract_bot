@@ -6,7 +6,7 @@ import os
 import gspread
 import re
 import numpy as np
-from datetime import date
+from datetime import date,datetime
 import psycopg2
 from decouple import config
 from sqlalchemy import select,inspect
@@ -99,6 +99,7 @@ def get_today_curr():
 
 
 def buid_dataframe(tables,df_dict,regular_expression,price_date):
+    price_date = datetime.strptime(price_date,'%d_%m_%y')
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
