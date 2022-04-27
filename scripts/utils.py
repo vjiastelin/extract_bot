@@ -103,13 +103,16 @@ def buid_dataframe(tables,df_dict,regular_expression,price_date):
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
-        # Drop empty and
-        tmp_df = table.dropna(how='all', axis=1)
-        tmp_df = tmp_df.dropna(how='all', axis=0)
-        # Shift columns name to first row
+        tmp_df = table
+        # Drop empty and        
         tmp_df.loc[-1] = tmp_df.columns
         tmp_df.index = tmp_df.index + 1  # shifting index
         tmp_df = tmp_df.sort_index()
+        tmp_df[tmp_df.columns[1]][0] = np.nan
+        tmp_df = tmp_df.dropna(how='all', axis=1)
+        tmp_df = tmp_df.dropna(how='all', axis=0)
+        # Shift columns name to first row
+        
         checked_value = tmp_df[tmp_df.columns[1]].astype('str').str.extractall('([\d.]+)').unstack().fillna('').sum(axis=1).astype(int).tolist()[0]
         if checked_value < 100000:
             price_col = 'price_usd'
