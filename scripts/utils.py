@@ -108,7 +108,8 @@ def buid_dataframe(tables,df_dict,regular_expression,price_date):
         tmp_df.loc[-1] = tmp_df.columns
         tmp_df.index = tmp_df.index + 1  # shifting index
         tmp_df = tmp_df.sort_index()
-        tmp_df[tmp_df.columns[1]][0] = np.nan
+        tmp_df.iloc[0][tmp_df.iloc[0].str.contains('^Unnamed')] = np.nan
+        tmp_df[tmp_df.columns[1]][0] = np.nan        
         tmp_df = tmp_df.dropna(how='all', axis=1)
         tmp_df = tmp_df.dropna(how='all', axis=0)
         # Shift columns name to first row
@@ -118,16 +119,20 @@ def buid_dataframe(tables,df_dict,regular_expression,price_date):
             price_col = 'price_usd'
         # Rename columns
         tmp_df.rename(
-            {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[1]: price_col, tmp_df.columns[2]: 'price_cny'}, axis=1, inplace=True)
+            {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[1]: price_col}, axis=1, inplace=True)
         df = df.append(tmp_df, ignore_index=True)
     df = df.replace([0.0,'0',0], np.nan)
     df = df.drop_duplicates(subset=['asic_name_raw', price_col])
  
     #Mark used and brandnew asics
-    index = df[df['asic_name_raw'].str.contains("Б/У")].index
-    if len(index) > 0:
-        df.loc[index[0]+1:, 'used_flag'] = True
-    df.loc[df['used_flag'] != True, 'used_flag'] = False
+    index_used = df[df['asic_name_raw'].str.contains("Б/У")].index
+    index_gpu = df[df['asic_name_raw'].str.contains("^Video")].index
+    if len(index_used) > 0:
+        df.loc[index_used[0]+1:, 'used_flag'] = True
+        df.loc[df['used_flag'] != True, 'used_flag'] = False
+    if len(index_gpu) > 0:
+        df = df[:index_gpu[0]]
+    
 
     #Format main price col and calc for exchange
     df[price_col] = pd.to_numeric(df[price_col],errors='coerce')
@@ -141,8 +146,8 @@ def buid_dataframe(tables,df_dict,regular_expression,price_date):
         df['price_usd'] = (df['price_rub'] / currency).round(2)
 
     # Format cny column
-    df['price_cny'] = df['price_cny'].apply(lambda x: x.replace(" ", "") if type(x) is str else x)
-    df['price_cny'] = pd.to_numeric(df['price_cny'],errors='coerce')
+    # df['price_cny'] = df['price_cny'].apply(lambda x: x.replace(" ", "") if type(x) is str else x)
+    # df['price_cny'] = pd.to_numeric(df['price_cny'],errors='coerce')
     # Format asic_name_raw column
     df['asic_name_raw'] = df['asic_name_raw'].apply(lambda x: x.replace("▪", ""))
     #Insert price date
