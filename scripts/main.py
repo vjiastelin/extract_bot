@@ -41,9 +41,11 @@ def parse(update: Update, context: CallbackContext):
     
     try:
         if from_asic_store:
-            context.bot.send_message(               
-                chat_id=config('CHAT_ID'),
-                text=acics_price(file_path,original_name))
+            with open(acics_price(file_path,original_name),'rb') as f:
+                context.bot.send_document(config('CHAT_ID'), document=f)
+            # context.bot.send_message(               
+            #     chat_id=config('CHAT_ID'),
+            #     text=)
                 
         else:
             for file in pdf_to_excel(file_path, update.message.from_user.username):

@@ -8,12 +8,15 @@ import re
 import numpy as np
 from datetime import date,datetime
 import psycopg2
+from jinja2 import Environment, FileSystemLoader
+from weasyprint import HTML
 from decouple import config
 from sqlalchemy import select,inspect
 from orm import AsicsList,AsicsPrices
 
 
 dir_store = './tmp_storage'
+static_dir = './static'
 pd.options.mode.chained_assignment = None
 
 dsn = config('DSN')
@@ -71,13 +74,16 @@ def acics_price(file_name: str,original_name: str):
     df_dict = pd.read_sql("select name, upper(replace(name,' ','')) search_name from asics.asics_list",dsn)
     df_dict = df_dict.fillna('')
     mathces = re.search('(\d{2}_\d{2}_\d{1,2})',original_name)
+    price_date = datetime.strptime(mathces[0],'%d_%m_%y')
     try:
         tables = tabula.read_pdf(file_name, pages="all")
-        df = buid_dataframe(tables,df_dict,regular_expression,mathces[0])
+        df = buid_dataframe(tables,df_dict,regular_expression,price_date)
         if config('TO_DB',default=True,cast=bool):
             df.to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
-        spread_sheet = update_worksheet(df)
-        return spread_sheet
+        #spread_sheet = update_worksheet(df)
+        pdf_file = os.path.join(dir_store,"asics_price.pdf")
+        create_pdf(df, pdf_file,price_date)
+        return pdf_file
     except Exception as e:
         delete_from_db(date.today())
         raise e
@@ -99,7 +105,6 @@ def get_today_curr():
 
 
 def buid_dataframe(tables,df_dict,regular_expression,price_date):
-    price_date = datetime.strptime(price_date,'%d_%m_%y')
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
@@ -158,6 +163,21 @@ def buid_dataframe(tables,df_dict,regular_expression,price_date):
     df = df.reset_index()
     return df
 
+def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime):
+    df['price_usd'] = df['price_usd'] * 1.1
+    df.rename(
+            {'asic_name_raw': 'Наименование','price_usd': 'Цена (USDT)'}, axis=1, inplace=True)
+    style_list = ["bootstrap.min.css","report.css"]
+    for idx,style in enumerate(style_list):
+        style_path = os.path.join(static_dir,style)
+        style_list[idx] = style_path
+    env = Environment(loader=FileSystemLoader('.'))
+    template = env.get_template(static_dir + "/asics_template.html")
+    template_vars = {"price_date" : price_date.date(),
+                 "new_asics": df[df.used_flag == False][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left').replace("<thead>", "<thead class='table-dark'>"),
+                 "used_asics": df[df.used_flag == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>")}
+    html_out = template.render(template_vars)
+    HTML(string=html_out).write_pdf(pdf_file_path,stylesheets=style_list)
 
 def update_worksheet(asics_pd : pd.DataFrame):
     creds = ServiceAccountCredentials.from_json_keyfile_name(
