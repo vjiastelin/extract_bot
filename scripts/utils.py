@@ -12,7 +12,7 @@ from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
 from decouple import config
 from sqlalchemy import select,inspect
-from orm import AsicsList,AsicsPrices
+from orm import AsicsList,AsicsPrices, GpuPrices
 
 
 dir_store = './tmp_storage'
@@ -60,6 +60,7 @@ def delete_from_db(price_date):
         conn = psycopg2.connect(dsn)        
         cur = conn.cursor()
         cur.execute('delete from asics.asics_prices where price_date = %s',(price_date,))
+        cur.execute('delete from asics.gpu_prices where price_date = %s',(price_date,))
         conn.commit()
     except (Exception, psycopg2.DatabaseError) as error:
         raise error
@@ -69,6 +70,7 @@ def delete_from_db(price_date):
             conn.close()
 
 def acics_price(file_name: str,original_name: str):
+    df_gpu = pd.DataFrame(columns=[column.name for column in inspect(GpuPrices).c])   
     chars_to_remove = ['-']
     regular_expression = '|'.join([re.escape(x.upper()) for x in chars_to_remove])
     df_dict = pd.read_sql("select name, upper(replace(name,' ','')) search_name from asics.asics_list",dsn)
@@ -77,9 +79,11 @@ def acics_price(file_name: str,original_name: str):
     price_date = datetime.strptime(mathces[0],'%d_%m_%y')
     try:
         tables = tabula.read_pdf(file_name, pages="all")
-        df = buid_dataframe(tables,df_dict,regular_expression,price_date)
+        df = buid_dataframes(tables,df_dict,regular_expression,price_date)
+        df_gpu[['gpu_name_raw','price_usd','price_rub','price_date']] = df[df.gpu == True][['asic_name_raw','price_usd','price_rub','price_date']]
         if config('TO_DB',default=True,cast=bool):
-            df.to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
+            df[df.gpu != True][df.columns.difference(['gpu'])].to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
+            df_gpu.to_sql('gpu_prices',dsn,if_exists='append',index=False,schema='asics')
         #spread_sheet = update_worksheet(df)
         pdf_file = os.path.join(dir_store,"asics_price.pdf")
         create_pdf(df, pdf_file,price_date)
@@ -104,8 +108,9 @@ def get_today_curr():
     return data['data']['RUB']
 
 
-def buid_dataframe(tables,df_dict,regular_expression,price_date):
+def buid_dataframes(tables,df_dict,regular_expression,price_date):
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
+
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
         tmp_df = table
@@ -133,11 +138,11 @@ def buid_dataframe(tables,df_dict,regular_expression,price_date):
     index_used = df[df['asic_name_raw'].str.contains("Б/У")].index
     index_gpu = df[df['asic_name_raw'].str.contains("^Video")].index
     if len(index_used) > 0:
-        df.loc[index_used[0]+1:, 'used_flag'] = True
-        df.loc[df['used_flag'] != True, 'used_flag'] = False
+        df.loc[index_used[0]+1:index_gpu[0], 'used_flag'] = True
+        df.loc[:index_used[0], 'used_flag'] = False
     if len(index_gpu) > 0:
-        df = df[:index_gpu[0]]
-    
+        df.loc[index_gpu[0]+1:, 'gpu'] = True
+        #df.drop(index_gpu[0], inplace=True)    
 
     #Format main price col and calc for exchange
     df[price_col] = pd.to_numeric(df[price_col],errors='coerce')
@@ -160,7 +165,7 @@ def buid_dataframe(tables,df_dict,regular_expression,price_date):
 
     df['asic_name'] = df['asic_name_raw'].apply(lambda x: get_match(x,df_dict,regular_expression))
     df = df.groupby(['asic_name_raw']).max()
-    df = df.reset_index()
+    df = df.reset_index()    
     return df
 
 def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime):
@@ -175,7 +180,8 @@ def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime):
     template = env.get_template(static_dir + "/asics_template.html")
     template_vars = {"price_date" : price_date.date(),
                  "new_asics": df[df.used_flag == False][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left').replace("<thead>", "<thead class='table-dark'>"),
-                 "used_asics": df[df.used_flag == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>")}
+                 "used_asics": df[df.used_flag == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>"),
+                 "gpu": df[df.gpu == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>")}
     html_out = template.render(template_vars)
     HTML(string=html_out).write_pdf(pdf_file_path,stylesheets=style_list)
 
