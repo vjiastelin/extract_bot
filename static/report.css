@@ -4,4 +4,9 @@ th {
 
 tr:nth-child(even) {
     background-color: #f2f2f2;
-  }
+}
+
+h1 {
+    margin: 0px !important;
+    font-size: 1.5rem !important;
+}
