@@ -77,16 +77,17 @@ def acics_price(file_name: str,original_name: str):
     df_dict = df_dict.fillna('')
     mathces = re.search('(\d{2}_\d{2}_\d{1,2})',original_name)
     price_date = datetime.strptime(mathces[0],'%d_%m_%y')
+    currency = get_today_curr()
     try:
         tables = tabula.read_pdf(file_name, pages="all")
-        df = buid_dataframes(tables,df_dict,regular_expression,price_date)
+        df = buid_dataframes(tables,df_dict,regular_expression,price_date,currency)
         df_gpu[['gpu_name_raw','price_usd','price_rub','price_date']] = df[df.gpu == True][['asic_name_raw','price_usd','price_rub','price_date']]
         if config('TO_DB',default=True,cast=bool):
             df[df.gpu != True][df.columns.difference(['gpu'])].to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
             df_gpu.to_sql('gpu_prices',dsn,if_exists='append',index=False,schema='asics')
         #spread_sheet = update_worksheet(df)
-        pdf_file = os.path.join(dir_store,"asics_price.pdf")
-        create_pdf(df, pdf_file,price_date)
+        pdf_file = os.path.join(dir_store,"Прайс-лист ПРЕДЗАКАЗ {}.pdf".format(price_date.strftime('%d.%m.%Y')))
+        create_pdf(df, pdf_file,price_date,currency)
         return pdf_file
     except Exception as e:
         delete_from_db(date.today())
@@ -95,7 +96,7 @@ def acics_price(file_name: str,original_name: str):
 def get_today_curr():
     import requests
     import json
-    currency_api = f'https://currencyapi.com/api/v2/latest?apikey=a7ea9a90-9dda-11ec-a030-a3200f160e11'
+    currency_api = f'https://garantex.io/api/v2/depth?market=usdtrub'
     header = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.75 Safari/537.36",
     "X-Requested-With": "XMLHttpRequest"
@@ -105,10 +106,10 @@ def get_today_curr():
     except:
         raise Exception('Something wrong with currency api')
     data = json.loads(r.text)
-    return data['data']['RUB']
+    return float(data['asks'][0]['price'])
 
 
-def buid_dataframes(tables,df_dict,regular_expression,price_date):
+def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
 
     # Drop empty columns and format data
@@ -148,8 +149,6 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date):
     df[price_col] = pd.to_numeric(df[price_col],errors='coerce')
     df.dropna(subset=[price_col],inplace=True)
 
-    currency = get_today_curr()
-
     if 'usd' in price_col:
         df['price_rub'] = (df['price_usd'] * currency).round(2)
     else:
@@ -168,7 +167,7 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date):
     df = df.reset_index()    
     return df
 
-def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime):
+def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime, currency):
     df['price_usd'] = df['price_usd'] * 1.1
     df.rename(
             {'asic_name_raw': 'Наименование','price_usd': 'Цена (USDT)'}, axis=1, inplace=True)
@@ -178,10 +177,11 @@ def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime):
         style_list[idx] = style_path
     env = Environment(loader=FileSystemLoader('.'))
     template = env.get_template(static_dir + "/asics_template.html")
-    template_vars = {"price_date" : price_date.date(),
-                 "new_asics": df[df.used_flag == False][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left').replace("<thead>", "<thead class='table-dark'>"),
-                 "used_asics": df[df.used_flag == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>"),
-                 "gpu": df[df.gpu == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>")}
+    template_vars = {"price_date" : price_date.strftime('%d.%m.%Y'),
+                "currency": currency,
+                "new_asics": df[df.used_flag == False][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left').replace("<thead>", "<thead class='table-dark'>"),
+                "used_asics": df[df.used_flag == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>"),
+                "gpu": df[df.gpu == True][['Наименование','Цена (USDT)']].to_html(classes='table table-bordered',index=False, justify='left' ).replace("<thead>", "<thead class='table-dark'>")}
     html_out = template.render(template_vars)
     HTML(string=html_out).write_pdf(pdf_file_path,stylesheets=style_list)
 
