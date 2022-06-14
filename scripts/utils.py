@@ -135,12 +135,12 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     df = df.replace([0.0,'0',0], np.nan)
     df = df.drop_duplicates(subset=['asic_name_raw', price_col])
  
-    #Mark used and brandnew asics
+    #Mark used,brandnew asics and gpu asics
     index_used = df[df['asic_name_raw'].str.contains("Б/У")].index
     index_gpu = df[df['asic_name_raw'].str.contains("^Video")].index
+    df['used_flag'] = False
     if len(index_used) > 0:
-        df.loc[index_used[0]+1:index_gpu[0], 'used_flag'] = True
-        df.loc[:index_used[0], 'used_flag'] = False
+        df.loc[index_used[0]+1:index_gpu[0] if len(index_gpu) > 0 else None, 'used_flag'] = True
     if len(index_gpu) > 0:
         df.loc[index_gpu[0]+1:, 'gpu'] = True
         #df.drop(index_gpu[0], inplace=True)    
