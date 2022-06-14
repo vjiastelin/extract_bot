@@ -143,6 +143,7 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
         df.loc[index_used[0]+1:index_gpu[0] if len(index_gpu) > 0 else None, 'used_flag'] = True
     if len(index_gpu) > 0:
         df.loc[index_gpu[0]+1:, 'gpu'] = True
+        df.loc[index_gpu[0]+1:, 'used_flag'] = None
         #df.drop(index_gpu[0], inplace=True)    
 
     #Format main price col and calc for exchange
