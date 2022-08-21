@@ -111,6 +111,7 @@ def get_today_curr():
 
 def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
+    price_col = 'price_rub'
 
     # Drop empty columns and format data
     for i, table in enumerate(tables, start=1):
