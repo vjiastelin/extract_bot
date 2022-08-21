@@ -120,11 +120,11 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
         tmp_df.loc[-1] = tmp_df.columns
         tmp_df.index = tmp_df.index + 1  # shifting index
         tmp_df = tmp_df.sort_index()
-        tmp_df.iloc[0][tmp_df.iloc[0].str.contains('^Unnamed')] = np.nan
+        #tmp_df.iloc[0][tmp_df.iloc[0].str.contains('^Unnamed')] = np.nan
         tmp_df[tmp_df.columns[1]][0] = np.nan        
         tmp_df = tmp_df.dropna(how='all', axis=1)
         tmp_df = tmp_df.dropna(how='all', axis=0)
-        # Shift columns name to first row
+     
         
         checked_value = tmp_df[tmp_df.columns[1]].astype('str').str.extractall('([\d.]+)').unstack().fillna('').sum(axis=1).astype(int).tolist()[0]
         if checked_value < 100000:
@@ -132,6 +132,7 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
         # Rename columns
         tmp_df.rename(
             {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[1]: price_col}, axis=1, inplace=True)
+        tmp_df.drop(df.iloc[:, 1: ].columns,axis=1,inplace=True)
         df = df.append(tmp_df, ignore_index=True)
     df = df.replace([0.0,'0',0], np.nan)
     df = df.drop_duplicates(subset=['asic_name_raw', price_col])
