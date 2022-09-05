@@ -124,10 +124,9 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
         tmp_df[tmp_df.columns[1]][0] = np.nan        
         tmp_df = tmp_df.dropna(how='all', axis=1)
         tmp_df = tmp_df.dropna(how='all', axis=0)
-     
-        
+             
         checked_value = tmp_df[tmp_df.columns[1]].astype('str').str.extractall('([\d.]+)').unstack().fillna('').sum(axis=1).astype(int).tolist()[0]
-        if checked_value < 100000:
+        if checked_value < 60000 and i == 1:
             price_col = 'price_usd'
         # Rename columns
         tmp_df.rename(
