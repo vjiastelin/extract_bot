@@ -137,8 +137,8 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     df = df.drop_duplicates(subset=['asic_name_raw', price_col])
  
     #Mark used,brandnew asics and gpu asics
-    index_used = df[df['asic_name_raw'].str.contains("Б/У")].index
-    index_gpu = df[df['asic_name_raw'].str.contains("^Video")].index
+    index_used = df[df['asic_name_raw'].fillna('').str.contains("Б/У")].index
+    index_gpu = df[df['asic_name_raw'].fillna('').str.contains("^Видео")].index
     df['used_flag'] = False
     if len(index_used) > 0:
         df.loc[index_used[0]+1:index_gpu[0] if len(index_gpu) > 0 else None, 'used_flag'] = True
@@ -170,7 +170,7 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     return df
 
 def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime, currency):
-    df['price_usd'] = (df['price_usd'] * 1.1).round(0)
+    df['price_usd'] = (df['price_usd'] * 1.1).astype(int)
     df.rename(
             {'asic_name_raw': 'Наименование','price_usd': 'Цена (USDT)'}, axis=1, inplace=True)
     style_list = ["bootstrap.min.css","report.css"]
