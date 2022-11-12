@@ -197,7 +197,7 @@ def update_worksheet(asics_pd : pd.DataFrame):
         sh = gc.open_by_key(SHEET_KEY)
         worksheet = sh.get_worksheet(0)
         worksheet.clear()     
-        asics_pd['price_usd'] = (asics_pd['price_usd'] * 1.1).round(0)
+        asics_pd['price_usd'] = (asics_pd['price_usd'] * 1.1 + 100).round(0)
         response = worksheet.update(
             [['Наименование','Цена (usdt)']] + asics_pd[asics_pd.used_flag == False][['asic_name_raw','price_usd']].values.tolist())
         endIdx = re.search(
