@@ -170,7 +170,7 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     return df
 
 def create_pdf(df: pd.DataFrame, pdf_file_path: str, price_date: datetime, currency):
-    df['price_usd'] = (df['price_usd'] * 1.1).astype(int)
+    df['price_usd'] = (df['price_usd'] * 1.1 + 100).astype(int)
     df.rename(
             {'asic_name_raw': 'Наименование','price_usd': 'Цена (USDT)'}, axis=1, inplace=True)
     style_list = ["bootstrap.min.css","report.css"]
