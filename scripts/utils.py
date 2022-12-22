@@ -160,7 +160,7 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     # df['price_cny'] = df['price_cny'].apply(lambda x: x.replace(" ", "") if type(x) is str else x)
     # df['price_cny'] = pd.to_numeric(df['price_cny'],errors='coerce')
     # Format asic_name_raw column
-    df['asic_name_raw'] = df['asic_name_raw'].apply(lambda x: x.replace("▪", ""))
+    df['asic_name_raw'] = df['asic_name_raw'].apply(lambda x: str(x).replace("▪", ""))
     #Insert price date
     df['price_date'] = price_date
 
