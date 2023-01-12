@@ -22,8 +22,6 @@ pd.options.mode.chained_assignment = None
 
 dsn = config('DSN')
 SHEET_KEY = config('SHEET_KEY')
-TEMPLATE = config('TABULA_TEMPLATE')
-
 
 CREDENTIALS_FILE = r'python-spreeadsheet-projects-3375f9903aba.json'
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
@@ -82,8 +80,16 @@ def acics_price(file_name: str,original_name: str):
     price_date = datetime.strptime(mathces[0],'%d_%m_%y')
     currency = get_today_curr()
     try:
-        tables = tabula.read_pdf_with_template(file_name, pages="all",stream=True, template_path=TEMPLATE)
-        df = buid_dataframes(tables,df_dict,regular_expression,price_date,currency)
+        page2 = pd.DataFrame()
+        table = tabula.read_pdf_with_template(file_name, pages=1,stream=True, template_path='first-page-template.json')[0]
+        table.rename({table.columns[0]: 'column1',table.columns[1]: 'column2'}, axis=1, inplace=True)
+        try:   
+            page2 = tabula.read_pdf_with_template(file_name, pages=2,stream=True, template_path='second-page-template.json')[0]
+            page2.rename({page2.columns[0]: 'column1',page2.columns[1]: 'column2'}, axis=1, inplace=True)
+        except Exception as e:
+            pass 
+        table = table.append(page2, ignore_index=True)
+        df = buid_dataframes(table,df_dict,regular_expression,price_date,currency)
         df_gpu[['gpu_name_raw','price_usd','price_rub','price_date']] = df[df.gpu == True][['asic_name_raw','price_usd','price_rub','price_date']]
         if config('TO_DB',default=True,cast=bool):
             df[df.gpu != True][df.columns.difference(['gpu'])].to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
@@ -115,27 +121,24 @@ def get_today_curr():
 def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
     price_col = 'price_rub'
-
     # Drop empty columns and format data
-    for i, table in enumerate(tables, start=1):
-        tmp_df = table
-        # Drop empty and        
-        tmp_df.loc[-1] = tmp_df.columns
-        tmp_df.index = tmp_df.index + 1  # shifting index
-        tmp_df = tmp_df.sort_index()
-        #tmp_df.iloc[0][tmp_df.iloc[0].str.contains('^Unnamed')] = np.nan
-        tmp_df[tmp_df.columns[1]][0] = np.nan        
-        tmp_df = tmp_df.dropna(how='all', axis=1)
-        tmp_df = tmp_df.dropna(how='all', axis=0)
-             
-        checked_value = tmp_df[tmp_df.columns[1]].astype('str').str.extractall('([\d.]+)').unstack().fillna('').sum(axis=1).astype(int).tolist()[0]
-        if checked_value < 60000 and i == 1:
-            price_col = 'price_usd'
-        # Rename columns
-        tmp_df.rename(
-            {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[1]: price_col}, axis=1, inplace=True)
-        tmp_df.drop(tmp_df.iloc[:, 2: ].columns,axis=1,inplace=True)
-        df = df.append(tmp_df, ignore_index=True)
+    tmp_df = tables
+    # Drop empty and        
+    tmp_df.loc[-1] = tmp_df.columns
+    tmp_df.index = tmp_df.index + 1  # shifting index
+    tmp_df = tmp_df.sort_index()
+    tmp_df[tmp_df.columns[1]][0] = np.nan        
+    tmp_df = tmp_df.dropna(how='all', axis=1)
+    tmp_df = tmp_df.dropna(how='all', axis=0)
+            
+    checked_value = tmp_df[tmp_df.columns[1]].astype('str').str.extractall('([\d.]+)').unstack().fillna('').sum(axis=1).astype(int).tolist()[0]
+    if checked_value < 60000:
+        price_col = 'price_usd'
+    # Rename columns
+    tmp_df.rename(
+        {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[1]: price_col}, axis=1, inplace=True)
+    tmp_df.drop(tmp_df.iloc[:, 2: ].columns,axis=1,inplace=True)
+    df = df.append(tmp_df, ignore_index=True)
     df = df.replace([0.0,'0',0], np.nan)
     df = df.drop_duplicates(subset=['asic_name_raw', price_col])
  
