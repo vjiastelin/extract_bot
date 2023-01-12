@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import gspread
 import re
+import enum
 import numpy as np
 from datetime import date,datetime
 import psycopg2
@@ -21,6 +22,8 @@ pd.options.mode.chained_assignment = None
 
 dsn = config('DSN')
 SHEET_KEY = config('SHEET_KEY')
+TEMPLATE = config('TABULA_TEMPLATE')
+
 
 CREDENTIALS_FILE = r'python-spreeadsheet-projects-3375f9903aba.json'
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
@@ -79,7 +82,7 @@ def acics_price(file_name: str,original_name: str):
     price_date = datetime.strptime(mathces[0],'%d_%m_%y')
     currency = get_today_curr()
     try:
-        tables = tabula.read_pdf(file_name, pages="all")
+        tables = tabula.read_pdf_with_template(file_name, pages="all",stream=True, template_path=TEMPLATE)
         df = buid_dataframes(tables,df_dict,regular_expression,price_date,currency)
         df_gpu[['gpu_name_raw','price_usd','price_rub','price_date']] = df[df.gpu == True][['asic_name_raw','price_usd','price_rub','price_date']]
         if config('TO_DB',default=True,cast=bool):
