@@ -89,7 +89,7 @@ def acics_price(file_name: str,original_name: str):
         except Exception as e:
             pass 
         table = table.append(page2, ignore_index=True)
-        df = buid_dataframes(table,df_dict,regular_expression,price_date,currency)
+        df = buid_dataframes(table,df_dict,regular_expression,price_date)
         df_gpu[['gpu_name_raw','price_usd','price_rub','price_date']] = df[df.gpu == True][['asic_name_raw','price_usd','price_rub','price_date']]
         if config('TO_DB',default=True,cast=bool):
             df[df.gpu != True][df.columns.difference(['gpu'])].to_sql('asics_prices',dsn,if_exists='append',index=False,schema='asics')
@@ -118,9 +118,10 @@ def get_today_curr():
     return float(data['asks'][0]['price'])
 
 
-def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
+def buid_dataframes(tables,df_dict,regular_expression,price_date):
     df = pd.DataFrame(columns=[column.name for column in inspect(AsicsPrices).c])
-    price_col = 'price_rub'
+    price_col = 'price_usd'
+    price_col_num = 2
     # Drop empty columns and format data
     tmp_df = tables
     # Drop empty and        
@@ -133,11 +134,13 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
             
     checked_value = tmp_df[tmp_df.columns[1]].astype('str').str.extractall('([\d.]+)').unstack().fillna('').sum(axis=1).astype(int).tolist()[0]
     if checked_value < 60000:
-        price_col = 'price_usd'
+        price_col = 'price_rub'
+        price_col_num = 1
     # Rename columns
     tmp_df.rename(
-        {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[1]: price_col}, axis=1, inplace=True)
-    tmp_df.drop(tmp_df.iloc[:, 2: ].columns,axis=1,inplace=True)
+        {tmp_df.columns[0]: 'asic_name_raw',tmp_df.columns[price_col_num]: price_col}, axis=1, inplace=True)
+    drop_columns = [col for col in tmp_df.columns if col not in ['asic_name_raw',price_col]]
+    tmp_df.drop(drop_columns,axis=1, inplace=True)
     df = df.append(tmp_df, ignore_index=True)
     df = df.replace([0.0,'0',0], np.nan)
     df = df.drop_duplicates(subset=['asic_name_raw', price_col])
@@ -157,10 +160,10 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     df[price_col] = pd.to_numeric(df[price_col],errors='coerce')
     df.dropna(subset=[price_col],inplace=True)
 
-    if 'usd' in price_col:
-        df['price_rub'] = (df['price_usd'] * currency).round(2)
-    else:
-        df['price_usd'] = (df['price_rub'] / currency).round(2)
+    # if 'usd' in price_col:
+    #     df['price_rub'] = (df['price_usd'] * currency).round(2)
+    # else:
+    #     df['price_usd'] = (df['price_rub'] / currency).round(2)
 
     # Format cny column
     # df['price_cny'] = df['price_cny'].apply(lambda x: x.replace(" ", "") if type(x) is str else x)
