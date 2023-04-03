@@ -82,10 +82,14 @@ def acics_price(file_name: str,original_name: str):
     try:
         page2 = pd.DataFrame()
         table = tabula.read_pdf_with_template(file_name, pages=1,stream=True, template_path='first-page-template.json')[0]
-        table.rename({table.columns[0]: 'column1',table.columns[1]: 'column2'}, axis=1, inplace=True)
+        table.rename({table.columns[0]: 'column1',table.columns[1]: 'column2',table.columns[2]: 'column3'}, axis=1, inplace=True)
         try:   
             page2 = tabula.read_pdf_with_template(file_name, pages=2,stream=True, template_path='second-page-template.json')[0]
-            page2.rename({page2.columns[0]: 'column1',page2.columns[1]: 'column2'}, axis=1, inplace=True)
+            page2.loc[-1] = page2.columns
+            page2.index = page2.index + 1  # shifting index
+            page2 = page2.sort_index()
+            page2.rename({page2.columns[0]: 'column1',page2.columns[1]: 'column2',page2.columns[2]: 'column3'}, axis=1, inplace=True)
+           
         except Exception as e:
             pass 
         table = table.append(page2, ignore_index=True)
@@ -123,12 +127,9 @@ def buid_dataframes(tables,df_dict,regular_expression,price_date,currency):
     price_col = 'price_usd'
     price_col_num = 2
     # Drop empty columns and format data
-    tmp_df = tables
-    # Drop empty and        
-    tmp_df.loc[-1] = tmp_df.columns
-    tmp_df.index = tmp_df.index + 1  # shifting index
-    tmp_df = tmp_df.sort_index()
-    tmp_df[tmp_df.columns[1]][0] = np.nan        
+    tmp_df = tables    
+   
+    #tmp_df[tmp_df.columns[1]][0] = np.nan        
     tmp_df = tmp_df.dropna(how='all', axis=1)
     tmp_df = tmp_df.dropna(how='all', axis=0)
             
